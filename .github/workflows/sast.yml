@@ -21,5 +21,9 @@ jobs:
           comment-pr: true
           upload-results: true
           exclude-directories: "tests/vulnerable"
-          claude-api-key: ${{ secrets.CLAUDE_API_KEY }}
           run-every-commit: true
+          use-vertex: true
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: research-489617
+          CLOUD_ML_REGION: global
+

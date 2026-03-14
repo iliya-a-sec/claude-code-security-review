@@ -77,7 +77,7 @@ class TestEnvironmentSetup:
         valid, error = runner.validate_claude_available()
         if 'not installed' not in error:
             assert not valid
-            assert 'ANTHROPIC_API_KEY' in error
+            assert 'ANTHROPIC_API_KEY' in error or 'Vertex AI' in error
 
 
 class TestFilteringIntegration:

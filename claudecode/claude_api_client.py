@@ -18,6 +18,40 @@ from claudecode.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _is_vertex_enabled() -> bool:
+    """Check if Vertex AI is enabled via environment variable."""
+    return os.environ.get("CLAUDE_CODE_USE_VERTEX") == "1"
+
+
+def _create_anthropic_client(api_key: Optional[str] = None) -> Anthropic:
+    """Create the appropriate Anthropic client based on provider configuration.
+
+    Returns Anthropic or AnthropicVertex client depending on environment.
+    """
+    if _is_vertex_enabled():
+        from anthropic import AnthropicVertex
+
+        project_id = os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID")
+        region = os.environ.get("CLOUD_ML_REGION")
+
+        if not project_id or not region:
+            raise ValueError(
+                "ANTHROPIC_VERTEX_PROJECT_ID and CLOUD_ML_REGION are required "
+                "when using Google Vertex AI (CLAUDE_CODE_USE_VERTEX=1)."
+            )
+
+        logger.info(f"Initializing AnthropicVertex client (project={project_id}, region={region})")
+        return AnthropicVertex(project_id=project_id, region=region)
+    else:
+        resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        if not resolved_key:
+            raise ValueError(
+                "No Anthropic API key found. Please set ANTHROPIC_API_KEY environment variable "
+                "or provide api_key parameter."
+            )
+        return Anthropic(api_key=resolved_key)
+
+
 class ClaudeAPIClient:
     """Client for calling Claude API directly for security analysis tasks."""
     
@@ -37,29 +71,24 @@ class ClaudeAPIClient:
         self.model = model or DEFAULT_CLAUDE_MODEL
         self.timeout_seconds = timeout_seconds or DEFAULT_TIMEOUT_SECONDS
         self.max_retries = max_retries or DEFAULT_MAX_RETRIES
-        
-        # Get API key from environment or parameter
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-        if not self.api_key:
-            raise ValueError(
-                "No Anthropic API key found. Please set ANTHROPIC_API_KEY environment variable "
-                "or provide api_key parameter."
-            )
-        
-        # Initialize Anthropic client
-        self.client = Anthropic(api_key=self.api_key)
+        self.use_vertex = _is_vertex_enabled()
+
+        # Initialize appropriate client (Anthropic or AnthropicVertex)
+        self.client = _create_anthropic_client(api_key=api_key)
         logger.info("Claude API client initialized successfully")
     
     def validate_api_access(self) -> Tuple[bool, str]:
         """Validate that API access is working.
-        
+
         Returns:
             Tuple of (success, error_message)
         """
         try:
-            # Simple test call to verify API access
+            # Use the configured model for validation when on Vertex,
+            # since Vertex model names differ from direct API names
+            validation_model = self.model if self.use_vertex else "claude-3-5-haiku-20241022"
             self.client.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model=validation_model,
                 max_tokens=10,
                 messages=[{"role": "user", "content": "Hello"}],
                 timeout=10

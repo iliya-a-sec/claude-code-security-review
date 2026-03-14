@@ -321,12 +321,13 @@ class SimpleClaudeRunner:
                 text=True,
                 timeout=10
             )
-            
+
             if result.returncode == 0:
-                # Also check if API key is configured
+                # Check authentication: API key or Vertex AI
+                use_vertex = os.environ.get('CLAUDE_CODE_USE_VERTEX') == '1'
                 api_key = os.environ.get('ANTHROPIC_API_KEY', '')
-                if not api_key:
-                    return False, "ANTHROPIC_API_KEY environment variable is not set"
+                if not api_key and not use_vertex:
+                    return False, "ANTHROPIC_API_KEY environment variable is not set (or enable Vertex AI)"
                 return True, ""
             else:
                 error_msg = f"Claude Code returned exit code {result.returncode}"
@@ -410,9 +411,10 @@ def initialize_findings_filter(custom_filtering_instructions: Optional[str] = No
         # Check if we should use Claude API filtering
         use_claude_filtering = os.environ.get('ENABLE_CLAUDE_FILTERING', 'false').lower() == 'true'
         api_key = os.environ.get('ANTHROPIC_API_KEY')
-        
-        if use_claude_filtering and api_key:
-            # Use full filtering with Claude API
+        use_vertex = os.environ.get('CLAUDE_CODE_USE_VERTEX') == '1'
+
+        if use_claude_filtering and (api_key or use_vertex):
+            # Use full filtering with Claude API (direct or via Vertex)
             return FindingsFilter(
                 use_hard_exclusions=True,
                 use_claude_filtering=True,

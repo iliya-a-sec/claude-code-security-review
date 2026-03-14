@@ -24,8 +24,8 @@ inputs:
     default: '20'
   
   claude-api-key:
-    description: 'Anthropic Claude API key for security analysis'
-    required: true
+    description: 'Anthropic Claude API key for security analysis (not required when using Vertex AI)'
+    required: false
     default: ''
 
   claude-model:
@@ -47,6 +47,11 @@ inputs:
     description: 'Path to custom security scan instructions text file to append to audit prompt'
     required: false
     default: ''
+
+  use-vertex:
+    description: 'Use Google Vertex AI with OIDC authentication instead of direct Anthropic API'
+    required: false
+    default: 'false'
 
 outputs:
   findings-count:
@@ -182,13 +187,18 @@ runs:
         GITHUB_REPOSITORY: ${{ github.repository }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         ANTHROPIC_API_KEY: ${{ inputs.claude-api-key }}
-        ENABLE_CLAUDE_FILTERING: 'true' 
+        ENABLE_CLAUDE_FILTERING: 'true'
         EXCLUDE_DIRECTORIES: ${{ inputs.exclude-directories }}
         FALSE_POSITIVE_FILTERING_INSTRUCTIONS: ${{ inputs.false-positive-filtering-instructions }}
         CUSTOM_SECURITY_SCAN_INSTRUCTIONS: ${{ inputs.custom-security-scan-instructions }}
         CLAUDE_MODEL: ${{ inputs.claude-model }}
         CLAUDECODE_TIMEOUT: ${{ inputs.claudecode-timeout }}
         ACTION_PATH: ${{ github.action_path }}
+        CLAUDE_CODE_USE_VERTEX: ${{ inputs.use-vertex == 'true' && '1' || '' }}
+        ANTHROPIC_VERTEX_PROJECT_ID: ${{ env.ANTHROPIC_VERTEX_PROJECT_ID }}
+        CLOUD_ML_REGION: ${{ env.CLOUD_ML_REGION }}
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
+        ANTHROPIC_VERTEX_BASE_URL: ${{ env.ANTHROPIC_VERTEX_BASE_URL }}
       run: |
         echo "Running ClaudeCode AI security analysis..."
         echo "----------------------------------------"
@@ -203,14 +213,26 @@ runs:
           exit 0
         fi
         
-        # Validate API key is provided
-        if [ -z "$ANTHROPIC_API_KEY" ]; then
-          echo "::error::ANTHROPIC_API_KEY is not set. Please provide the claude-api-key input to the action."
+        # Validate authentication is provided
+        if [ -z "$ANTHROPIC_API_KEY" ] && [ "$CLAUDE_CODE_USE_VERTEX" != "1" ]; then
+          echo "::error::ANTHROPIC_API_KEY is not set. Please provide the claude-api-key input or use Vertex AI (use-vertex: 'true')."
           echo "Example usage:"
           echo "  - uses: anthropics/claude-code-security-reviewer@main"
           echo "    with:"
           echo "      claude-api-key: \$\{{ secrets.ANTHROPIC_API_KEY }}"
           exit 1
+        fi
+
+        # Validate Vertex AI configuration if enabled
+        if [ "$CLAUDE_CODE_USE_VERTEX" == "1" ]; then
+          if [ -z "$ANTHROPIC_VERTEX_PROJECT_ID" ]; then
+            echo "::error::ANTHROPIC_VERTEX_PROJECT_ID is required when using Google Vertex AI."
+            exit 1
+          fi
+          if [ -z "$CLOUD_ML_REGION" ]; then
+            echo "::error::CLOUD_ML_REGION is required when using Google Vertex AI."
+            exit 1
+          fi
         fi
                 
         # Set timeout

@@ -64,7 +64,7 @@ class TestSimpleClaudeRunner:
             success, error = runner.validate_claude_available()
         
         assert success is False
-        assert 'ANTHROPIC_API_KEY environment variable is not set' in error
+        assert 'ANTHROPIC_API_KEY environment variable is not set' in error or 'enable Vertex AI' in error
     
     @patch('subprocess.run')
     def test_validate_claude_available_not_installed(self, mock_run):
